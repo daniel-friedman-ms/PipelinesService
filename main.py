@@ -14,7 +14,7 @@ from pydantic import BaseModel
 from sqlalchemy import select, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from config import MODEL_DIR, PORT, DEVICE
+from config import MODEL_CACHE_DIR, MODELS_SERVICE_URL, PORT, DEVICE
 from database import get_session, init_db
 from engine import PipelineEngine
 from models import Pipeline, PipelineVersion, PipelineTestRun, PipelineDeployment
@@ -31,6 +31,7 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    os.makedirs(MODEL_CACHE_DIR, exist_ok=True)
     await init_db()
     logger.info("Database initialized")
     yield
@@ -198,27 +199,50 @@ async def get_node_types():
 
 @app.get("/models")
 async def list_models():
-    """List available model files on this server."""
-    if not os.path.isdir(MODEL_DIR):
-        return {"models": [], "model_dir": MODEL_DIR, "error": f"Directory not found: {MODEL_DIR}"}
+    """List cached model files on this server."""
+    if not os.path.isdir(MODEL_CACHE_DIR):
+        return {"models": [], "model_cache_dir": MODEL_CACHE_DIR, "error": f"Directory not found: {MODEL_CACHE_DIR}"}
 
     models = []
-    for filename in sorted(os.listdir(MODEL_DIR)):
-        if filename.endswith(".pt"):
-            filepath = os.path.join(MODEL_DIR, filename)
-            stat = os.stat(filepath)
-            models.append({
-                "filename": filename,
-                "size_mb": round(stat.st_size / (1024 * 1024), 2),
-                "modified": stat.st_mtime,
-            })
+    for filename in sorted(os.listdir(MODEL_CACHE_DIR)):
+        if not filename.endswith(".pt"):
+            continue
+        filepath = os.path.join(MODEL_CACHE_DIR, filename)
+        stat = os.stat(filepath)
 
-    return {"models": models, "model_dir": MODEL_DIR}
+        # Read SHA-256 from sidecar if available
+        sha_path = filepath + ".sha256"
+        sha256 = None
+        if os.path.isfile(sha_path):
+            sha256 = open(sha_path).read().strip()
+
+        models.append({
+            "filename": filename,
+            "size_mb": round(stat.st_size / (1024 * 1024), 2),
+            "modified": stat.st_mtime,
+            "sha256": sha256,
+        })
+
+    return {"models": models, "model_cache_dir": MODEL_CACHE_DIR}
+
+
+@app.post("/models/fetch")
+async def fetch_model_to_cache(filename: str = Query(..., description="Model filename to fetch")):
+    """Pre-warm: fetch a model from the models service into the local cache."""
+    from model_resolver import fetch_model
+
+    try:
+        result = await fetch_model(filename)
+        return result
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Failed to fetch model: {e}")
 
 
 @app.get("/health")
 async def health():
-    """Health check with device, model, and database info."""
+    """Health check with device, model cache, and database info."""
     from stages.yolo_detector import _model_cache
 
     db_status = "unknown"
@@ -233,8 +257,8 @@ async def health():
     return {
         "status": "ok",
         "device": DEVICE,
-        "model_dir": MODEL_DIR,
-        "model_dir_exists": os.path.isdir(MODEL_DIR),
+        "models_service_url": MODELS_SERVICE_URL,
+        "model_cache_dir": MODEL_CACHE_DIR,
         "loaded_models": list(_model_cache.keys()),
         "loaded_model_count": len(_model_cache),
         "database": db_status,
@@ -578,5 +602,5 @@ async def publish_pipeline(
 if __name__ == "__main__":
     import uvicorn
 
-    logger.info(f"Starting Pipelines Service on port {PORT}, device={DEVICE}, model_dir={MODEL_DIR}")
+    logger.info(f"Starting Pipelines Service on port {PORT}, device={DEVICE}, model_cache_dir={MODEL_CACHE_DIR}, models_service={MODELS_SERVICE_URL}")
     uvicorn.run("main:app", host="0.0.0.0", port=PORT, reload=True)

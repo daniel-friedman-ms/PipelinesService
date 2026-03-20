@@ -7,7 +7,7 @@ from PIL import Image
 
 from config import DEVICE
 from engine import PipelineStage, PipelineContext
-from .yolo_detector import _get_model
+from .yolo_detector import get_model
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +33,7 @@ class EnsembleStage(PipelineStage):
         all_model_results = []
 
         for filename in self.model_filenames:
-            model = _get_model(filename)
+            model = await get_model(filename)
             results = model.predict(
                 img,
                 conf=0.1,  # Low threshold — ensemble decides final confidence

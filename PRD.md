@@ -147,6 +147,7 @@ Production: Cron -> POST /detect -> runs active pipeline -> alerts to Cloud
 +-- fleet-ops-models-service/          # Model storage + HTTP push deployment
 |   +-- models/                        # .pt files stored here
 +-- fleet-ops-pipelines-service/       # THIS SERVICE
+|   +-- model_cache/                   # Cached .pt files (pulled from models service on demand)
 +-- SeaScannerObjectDetectionService/  # Will be replaced by this service (Phase 3)
 +-- video-annotator-service/           # Receives models from models service
 ```
@@ -180,7 +181,9 @@ A fully working Phase 1 implementation exists inside the Fleet Ops monorepo at `
 
 | Variable | Env Var | Default | Description |
 |----------|---------|---------|-------------|
-| `MODEL_DIR` | `MODEL_DIR` | `../fleet-ops-models-service/models` | Path to `.pt` model files |
+| `MODEL_DIR` | `MODEL_DIR` | `../fleet-ops-models-service/models` | (Deprecated) Legacy path to `.pt` model files |
+| `MODEL_CACHE_DIR` | `MODEL_CACHE_DIR` | `./model_cache` | Local directory for cached model files pulled from models service |
+| `MODELS_SERVICE_URL` | `MODELS_SERVICE_URL` | `http://localhost:8100` | Base URL of the models service for fetching model files |
 | `PORT` | `PIPELINE_RUNTIME_PORT` | `8200` | Service port |
 | `DEVICE` | `PIPELINE_RUNTIME_DEVICE` | `cpu` | Inference device (`cpu` or `cuda`) |
 
@@ -189,7 +192,7 @@ A fully working Phase 1 implementation exists inside the Fleet Ops monorepo at `
 | Stage | Type String | What It Does |
 |-------|-------------|--------------|
 | `ImageInputStage` | `image_input` | Reads image dimensions and format, passes image through. Entry point for every pipeline. |
-| `YOLODetectorStage` | `yolo_detector` | Loads ultralytics YOLO model (with module-level cache), runs inference, returns detections with bounding boxes, class names, and confidence scores. Config: `model_filename`, `confidence_threshold`, `iou_threshold`. |
+| `YOLODetectorStage` | `yolo_detector` | Loads ultralytics YOLO model via pull-through cache (in-memory → local disk → HTTP fetch from models service), runs inference, returns detections with bounding boxes, class names, and confidence scores. Config: `model_filename`, `confidence_threshold`, `iou_threshold`. |
 | `EnsembleStage` | `ensemble` | Runs N models on the same image, groups detections by IoU overlap, aggregates confidence via mean/max/weighted_average. Config: `models[]`, `strategy`, `weights[]`. |
 | `JSONOutputStage` | `json_output` | Formats pipeline context into clean output JSON (detection count, detections array, metadata, alert decision). Terminal node. |
 
@@ -512,17 +515,32 @@ Same API contract as current SeaScanner Detection Service. Cron calls this. Runs
 
 **`GET /models`**
 
-List available `.pt` model files on this server.
+List cached `.pt` model files on this server (pulled from models service on demand).
 
 - **Response:**
 ```json
 {
   "models": [
-    { "filename": "best.pt", "size_mb": 12.34, "modified": 1710500000.0 }
+    { "filename": "best.pt", "size_mb": 12.34, "modified": 1710500000.0, "sha256": "abc123..." }
   ],
-  "model_dir": "../fleet-ops-models-service/models"
+  "model_cache_dir": "./model_cache"
 }
 ```
+
+**`POST /models/fetch`**
+
+Pre-warm: fetch a model from the models service into the local cache before a pipeline needs it.
+
+- **Query params:** `filename` (required) — the model filename to fetch
+- **Response:**
+```json
+{
+  "filename": "best.pt",
+  "size_bytes": 12935168,
+  "sha256": "abc123..."
+}
+```
+- **Errors:** 404 if model not found on models service, 502 if models service unreachable
 
 **`GET /health`**
 
@@ -533,8 +551,8 @@ Health check with device, model cache, and database status.
 {
   "status": "ok",
   "device": "cuda",
-  "model_dir": "../fleet-ops-models-service/models",
-  "model_dir_exists": true,
+  "models_service_url": "http://localhost:8100",
+  "model_cache_dir": "./model_cache",
   "loaded_models": ["best.pt"],
   "loaded_model_count": 1,
   "database": "connected"
@@ -657,6 +675,7 @@ Add production endpoints, alert output stage, pipeline caching, and hot-reload. 
 | **Config ownership in pipeline nodes** | Same model can run with different inference params in different pipeline stages. Model Hub stores files + advisory `recommended_config` only. |
 | **Compatibility sandwich** | Never change Cron input or Cloud output contracts. Replace only the middle. This makes migration safe and reversible. |
 | **Separate repo** | Deployed on AI server with different lifecycle, dependencies, and hardware than Fleet Ops. Needs ultralytics + PyTorch + CUDA. |
+| **Pull-through model cache** | Models are fetched from the models service over HTTP on demand and cached locally (in-memory + disk). Avoids filesystem coupling, survives containerization and scaling. UI-driven model selection — the service only fetches models referenced by pipeline definitions. |
 | **Module-level model cache** | YOLO models are expensive to load (seconds). Cache in process memory, reload only when model file changes. |
 | **Topological sort execution** | Supports DAG structure needed for Phase 2 conditional routing. Linear chains are a special case of DAG. |
 
@@ -673,7 +692,7 @@ Add production endpoints, alert output stage, pipeline caching, and hot-reload. 
 | Migrations | Alembic | Schema versioning and migration management |
 | Model inference | ultralytics (YOLO) | Current model format, direct access to PyTorch |
 | Image processing | Pillow (PIL) | Image decoding, dimension reading |
-| HTTP client | httpx | For future alert output to SeaScanner Cloud (Phase 3) |
+| HTTP client | httpx | Model fetching from models service (pull-through cache), future alert output to SeaScanner Cloud (Phase 3) |
 | Form parsing | python-multipart | Required by FastAPI for file upload endpoints |
 | Runtime | Python 3.11+ | Match type union syntax (`str | None`), Fleet Ops standard |
 | GPU | CUDA (via PyTorch) | Available on AI server, explicitly configured via `PIPELINE_RUNTIME_DEVICE` env var |
@@ -773,6 +792,7 @@ This shows how the full SeaScanner Detection Service + Alerts Hub logic would lo
 | Fleet Ops backend pipeline router | `fleet-ops/backend/app/routers/pipelines.py` |
 | Fleet Ops frontend pipeline editor | `fleet-ops/frontend/src/pages/PipelineEditor.tsx` |
 | Fleet Ops frontend pipeline list | `fleet-ops/frontend/src/pages/Pipelines.tsx` |
+| Pull-Through Model Cache PRD | `docs/prd-pull-through-model-cache.md` |
 | Model Hub PRD | `fleet-ops/docs/prd-model-hub.md` |
 | Models service repo | `fleet-ops-models-service/` (sibling on AI server) |
 | GitHub | `https://github.com/daniel-friedman-ms/fleet-ops-pipelines-service` |
