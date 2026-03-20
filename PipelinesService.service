@@ -1,5 +1,5 @@
 [Unit]
-Description=Fleet Ops Pipelines Service
+Description=PipelinesService
 After=network.target
 
 [Service]

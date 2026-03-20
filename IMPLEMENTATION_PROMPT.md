@@ -1,23 +1,23 @@
-# Implementation Prompt — fleet-ops-pipelines-service
+# Implementation Prompt — PipelinesService
 
 ## Context
 
-You are implementing `fleet-ops-pipelines-service`, the Pipeline Runtime Service that executes ML inference pipelines on an AI server (`10.125.17.219:8200`).
+You are implementing `PipelinesService`, the Pipeline Runtime Service that executes ML inference pipelines on an AI server (`10.125.17.219:8200`).
 
 **Read `PRD.md` in this repo first** — it has full context on what this service is, the architecture, core abstractions, API contract, and database schema.
 
 **Cross-reference:** This service is part of a three-repo ecosystem:
-- `fleet-ops` — UI + orchestration. See `docs/prd-pipeline-builder.md` for the full Pipeline Builder PRD. The Fleet Ops backend (`backend/app/routers/pipelines.py`) currently has pipeline CRUD + DB tables that need to be **converted to thin proxies** pointing to THIS service's API.
-- `fleet-ops-models-service` — model file storage on the same AI server. Models are at `../fleet-ops-models-service/models/` (sibling directory).
-- `fleet-ops-pipelines-service` (THIS REPO) — pipeline execution, definitions, and state. **Owns its own PostgreSQL database.**
+- `FleetOps` — UI + orchestration. See `docs/prd-pipeline-builder.md` for the full Pipeline Builder PRD. The FleetOps backend (`backend/app/routers/pipelines.py`) currently has pipeline CRUD + DB tables that need to be **converted to thin proxies** pointing to THIS service's API.
+- `ModelsHubService` — model file storage on the same AI server. Models are at `../ModelsHubService/models/` (sibling directory).
+- `PipelinesService` (THIS REPO) — pipeline execution, definitions, and state. **Owns its own PostgreSQL database.**
 
 ---
 
 ## What We Have (Current State)
 
-### Working code in `fleet-ops/pipeline-runtime/` (to be migrated here)
+### Working code in `FleetOps/pipeline-runtime/` (to be migrated here)
 
-A fully working Pipeline Runtime exists inside the Fleet Ops repo. These files need to be moved to this repo with import fixes:
+A fully working Pipeline Runtime exists inside the FleetOps repo. These files need to be moved to this repo with import fixes:
 
 **`pipeline-runtime/main.py`** — FastAPI app:
 - `POST /pipelines/test` — receives image (multipart) + pipeline_definition (JSON form field), executes pipeline, returns `{ success, execution_time_ms, node_results, final_output }`
@@ -41,15 +41,15 @@ A fully working Pipeline Runtime exists inside the Fleet Ops repo. These files n
 
 **`pipeline-runtime/requirements.txt`** — fastapi, uvicorn, python-multipart, ultralytics, Pillow
 
-### Fleet Ops backend already has pipeline CRUD (will become proxy)
+### FleetOps backend already has pipeline CRUD (will become proxy)
 
-`fleet-ops/backend/app/routers/pipelines.py` currently:
+`FleetOps/backend/app/routers/pipelines.py` currently:
 - Has full CRUD endpoints (create, read, update, delete, list pipelines)
-- Stores pipeline data in Fleet Ops PostgreSQL (Pipeline, PipelineVersion, PipelineTestRun, PipelineDeployment models)
+- Stores pipeline data in FleetOps PostgreSQL (Pipeline, PipelineVersion, PipelineTestRun, PipelineDeployment models)
 - Proxies test requests to `http://10.125.17.219:8200/pipelines/test`
 - Has a node type registry (image_input, yolo_detector, ensemble, json_output)
 
-**This CRUD logic and DB ownership must move to THIS service.** Fleet Ops backend will be converted to a thin proxy (see the fleet-ops implementation prompt).
+**This CRUD logic and DB ownership must move to THIS service.** FleetOps backend will be converted to a thin proxy (see the FleetOps implementation prompt).
 
 ### This repo is currently empty (just .git)
 
@@ -61,22 +61,22 @@ A standalone service that:
 1. **Owns all pipeline data** in its own PostgreSQL (definitions, versions, test runs, active state)
 2. **Provides full CRUD API** for pipelines (create, read, update, delete, versions)
 3. **Executes pipelines** against images (test mode now, production `/detect` in Phase 3)
-4. **Is fully independent** — Fleet Ops going down does NOT affect production pipeline execution
+4. **Is fully independent** — FleetOps going down does NOT affect production pipeline execution
 5. **Runs as a systemd service** on the AI server with `deploy.sh`
 
 ---
 
 ## How To Implement
 
-### Step 1: Migrate core pipeline engine from fleet-ops/pipeline-runtime/
+### Step 1: Migrate core pipeline engine from FleetOps/pipeline-runtime/
 
-Copy these files from `fleet-ops/pipeline-runtime/` into this repo, fixing imports:
+Copy these files from `FleetOps/pipeline-runtime/` into this repo, fixing imports:
 
 **`config.py`** — Update:
 ```python
 import os
 
-MODEL_DIR = os.environ.get("MODEL_DIR", os.path.join(os.path.dirname(__file__), "..", "fleet-ops-models-service", "models"))
+MODEL_DIR = os.environ.get("MODEL_DIR", os.path.join(os.path.dirname(__file__), "..", "ModelsHubService", "models"))
 PORT = int(os.environ.get("PIPELINE_RUNTIME_PORT", "8200"))
 DEVICE = os.environ.get("PIPELINE_RUNTIME_DEVICE", "cpu")
 DATABASE_URL = os.environ.get("PIPELINE_DB_URL", "postgresql+asyncpg://pipeline:pipeline@localhost:5432/pipelines")
@@ -119,7 +119,7 @@ async def init_db():
         await conn.run_sync(Base.metadata.create_all)
 ```
 
-**`models.py`** — New file. SQLAlchemy models (migrated from Fleet Ops):
+**`models.py`** — New file. SQLAlchemy models (migrated from FleetOps):
 ```python
 from datetime import datetime
 from typing import Optional
@@ -174,7 +174,7 @@ class PipelineDeployment(Base):
 
 ### Step 3: Add CRUD endpoints to main.py
 
-Expand `main.py` to include pipeline CRUD. Reference `fleet-ops/backend/app/routers/pipelines.py` for the exact patterns — the CRUD logic there is what moves here. The endpoints this service must expose:
+Expand `main.py` to include pipeline CRUD. Reference `FleetOps/backend/app/routers/pipelines.py` for the exact patterns — the CRUD logic there is what moves here. The endpoints this service must expose:
 
 ```
 GET    /pipelines                    — list all pipelines (optional ?status= filter)
@@ -187,28 +187,28 @@ GET    /pipelines/{id}/versions     — list version history
 POST   /pipelines/{id}/test         — test pipeline with image (EXISTING — already works)
 GET    /pipelines/{id}/test-runs    — list test run history
 
-GET    /pipeline-nodes/types        — return node type registry (MOVE from Fleet Ops)
+GET    /pipeline-nodes/types        — return node type registry (MOVE from FleetOps)
 
 GET    /models                      — list .pt files (EXISTING — already works)
 GET    /health                      — health check (EXISTING — already works)
 ```
 
-The node type registry (the `NODE_TYPES` list with config schemas for image_input, yolo_detector, ensemble, json_output) should move from Fleet Ops backend to here. See `fleet-ops/backend/app/routers/pipelines.py` lines 74-149 for the exact data.
+The node type registry (the `NODE_TYPES` list with config schemas for image_input, yolo_detector, ensemble, json_output) should move from FleetOps backend to here. See `FleetOps/backend/app/routers/pipelines.py` lines 74-149 for the exact data.
 
-The `POST /pipelines/{id}/test` endpoint should now also save a `PipelineTestRun` record to the local DB (currently Fleet Ops does this).
+The `POST /pipelines/{id}/test` endpoint should now also save a `PipelineTestRun` record to the local DB (currently FleetOps does this).
 
 ### Step 4: Add deploy infrastructure
 
-**`deploy.sh`** — Same 3-mode pattern as fleet-ops-models-service:
+**`deploy.sh`** — Same 3-mode pattern as ModelsHubService:
 ```bash
-SERVICE_NAME="fleet-ops-pipelines-service"
+SERVICE_NAME="PipelinesService"
 ```
 Modes: `bash deploy.sh` (test), `sudo bash deploy.sh --install` (systemd), `sudo bash deploy.sh --update` (git pull + restart). Include venv setup and pip install.
 
-**`fleet-ops-pipelines-service.service`** — systemd unit template:
+**`PipelinesService.service`** — systemd unit template:
 ```ini
 [Unit]
-Description=Fleet Ops Pipelines Service
+Description=FleetOps Pipelines Service
 After=network.target
 
 [Service]
@@ -266,7 +266,7 @@ async def startup():
 ## File Structure (Final)
 
 ```
-fleet-ops-pipelines-service/
+PipelinesService/
 ├── main.py                              # FastAPI app — CRUD + test + models + health
 ├── config.py                            # Env-based config (MODEL_DIR, PORT, DEVICE, DATABASE_URL)
 ├── database.py                          # Async SQLAlchemy engine + session + Base
@@ -280,7 +280,7 @@ fleet-ops-pipelines-service/
 │   └── json_output.py                   # JSONOutputStage
 ├── requirements.txt                     # All dependencies including SQLAlchemy + asyncpg
 ├── deploy.sh                            # 3-mode deploy (test / --install / --update)
-├── fleet-ops-pipelines-service.service  # systemd unit template
+├── PipelinesService.service  # systemd unit template
 ├── .gitignore
 ├── README.md
 └── PRD.md                               # Already exists

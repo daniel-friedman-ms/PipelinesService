@@ -1,7 +1,7 @@
-# Fleet Ops Pipeline Runtime Service — PRD
+# FleetOps Pipeline Runtime Service — PRD
 
-> **Repository:** `fleet-ops-pipelines-service`
-> **AI server location:** `~/__MS__staging/fleet-ops-pipelines-service/`
+> **Repository:** `PipelinesService`
+> **AI server location:** `~/__MS__staging/PipelinesService/`
 > **Port:** 8200
 > **Last updated:** 2026-03-20
 
@@ -9,11 +9,11 @@
 
 ## 1. What This Service Is
 
-The Pipeline Runtime Service is a FastAPI application that **executes ML inference pipelines** against images. It runs on the AI server (`10.125.17.219`) alongside the GPU and model weights, and serves as the inference engine for the Fleet Ops visual pipeline builder.
+The Pipeline Runtime Service is a FastAPI application that **executes ML inference pipelines** against images. It runs on the AI server (`10.125.17.219`) alongside the GPU and model weights, and serves as the inference engine for the FleetOps visual pipeline builder.
 
-Its purpose is to **replace** the current hardcoded SeaScanner Detection Service + Alerts Hub with a single, configurable pipeline system. Instead of two bespoke services with logic buried in code, detection-to-alert logic is expressed as a visual DAG of composable nodes — designed in Fleet Ops, executed here.
+Its purpose is to **replace** the current hardcoded SeaScanner Detection Service + Alerts Hub with a single, configurable pipeline system. Instead of two bespoke services with logic buried in code, detection-to-alert logic is expressed as a visual DAG of composable nodes — designed in FleetOps, executed here.
 
-**This service owns all pipeline data.** Pipeline definitions, version history, test run records, and deployment state are stored in the service's own PostgreSQL database. Fleet Ops is a UI consumer that proxies requests to this service's API.
+**This service owns all pipeline data.** Pipeline definitions, version history, test run records, and deployment state are stored in the service's own PostgreSQL database. FleetOps is a UI consumer that proxies requests to this service's API.
 
 ---
 
@@ -21,7 +21,7 @@ Its purpose is to **replace** the current hardcoded SeaScanner Detection Service
 
 We are a maritime security company. YOLO-based detection models identify threats to clients' vessels and alert them in real time. Images are captured from cameras on vessels, processed through a detection pipeline, and alerts are generated and distributed to operators.
 
-**Fleet Ops** is our internal ML operations platform (React + FastAPI + PostgreSQL on the Training server). It provides an alert analytics dashboard, detection browser, model hub, and visual pipeline builder. This service is the runtime backend for that pipeline builder.
+**FleetOps** is our internal ML operations platform (React + FastAPI + PostgreSQL on the Training server). It provides an alert analytics dashboard, detection browser, model hub, and visual pipeline builder. This service is the runtime backend for that pipeline builder.
 
 ---
 
@@ -47,41 +47,41 @@ This architecture has compounding problems:
 
 | Repo | Role | DB | UI |
 |------|------|-----|-----|
-| `fleet-ops` | UI + orchestration | PostgreSQL (alerts, model metadata) | React dashboard (all pages including Pipeline Editor) |
-| `fleet-ops-models-service` | Model file storage + HTTP push deployment | None (filesystem) | None |
-| `fleet-ops-pipelines-service` | Pipeline execution + definitions + state | **Own PostgreSQL** (pipelines, versions, test runs, deployments) | **None** |
+| `FleetOps` | UI + orchestration | PostgreSQL (alerts, model metadata) | React dashboard (all pages including Pipeline Editor) |
+| `ModelsHubService` | Model file storage + HTTP push deployment | None (filesystem) | None |
+| `PipelinesService` | Pipeline execution + definitions + state | **Own PostgreSQL** (pipelines, versions, test runs, deployments) | **None** |
 
 ### 4.2 Data Ownership
 
 | Data | Owner | Why |
 |------|-------|-----|
-| Alert analytics, sync state | Fleet Ops DB | UI/dashboard concern |
-| Model metadata (name, tags, metrics, deploy history) | Fleet Ops DB | Registry/UI concern |
+| Alert analytics, sync state | FleetOps DB | UI/dashboard concern |
+| Model metadata (name, tags, metrics, deploy history) | FleetOps DB | Registry/UI concern |
 | Model files (.pt) | Models service filesystem | File I/O concern |
 | Pipeline definitions, versions, active state | **Pipelines service DB** | Execution + resilience |
 | Pipeline test run results | **Pipelines service DB** | Service ran the test |
 
 ### 4.3 Key Architectural Decisions
 
-**This service owns its own PostgreSQL database.** Pipeline data (definitions, versions, test runs, deployments) no longer lives in Fleet Ops PostgreSQL. It has been moved here.
+**This service owns its own PostgreSQL database.** Pipeline data (definitions, versions, test runs, deployments) no longer lives in FleetOps PostgreSQL. It has been moved here.
 
 Why:
-- **Resilience** — if Fleet Ops goes down, production pipelines keep running. The service has its own data.
+- **Resilience** — if FleetOps goes down, production pipelines keep running. The service has its own data.
 - **Generic** — in the future, different production flows (maritime detection, CV screening, container inspection) are just different pipelines in this service.
-- **Decoupled** — Fleet Ops is one UI consumer. Another UI or CLI could talk to the same API.
+- **Decoupled** — FleetOps is one UI consumer. Another UI or CLI could talk to the same API.
 - **Data ownership** — the service that executes pipelines should own the pipeline definitions.
 
 PostgreSQL over SQLite because this is a production service handling live detection pipelines. The AI server runs its own PostgreSQL container.
 
-**Fleet Ops owns the UI, this service is backend-only.** The Pipeline Editor UI (React Flow canvas, node palette, node inspector, test results panel) stays in Fleet Ops frontend. This service has no UI.
+**FleetOps owns the UI, this service is backend-only.** The Pipeline Editor UI (React Flow canvas, node palette, node inspector, test results panel) stays in FleetOps frontend. This service has no UI.
 
 Why:
-- Fleet Ops is the unified ops dashboard — pipeline editor is one tool alongside Model Hub, Detection Browser, etc.
+- FleetOps is the unified ops dashboard — pipeline editor is one tool alongside Model Hub, Detection Browser, etc.
 - The UI needs data from multiple services (model dropdown from Model Hub API, alert data, deployment status).
 - Micro-frontends add complexity for zero user benefit.
 - The API is the boundary, not the UI.
 
-**Fleet Ops backend is a thin proxy.** Fleet Ops backend no longer has pipeline business logic. It proxies all pipeline CRUD and execution requests to this service. Pipeline tables have been removed from Fleet Ops PostgreSQL.
+**FleetOps backend is a thin proxy.** FleetOps backend no longer has pipeline business logic. It proxies all pipeline CRUD and execution requests to this service. Pipeline tables have been removed from FleetOps PostgreSQL.
 
 ### 4.4 Where This Service Fits
 
@@ -99,7 +99,7 @@ This service sits in a **compatibility sandwich** — it must honor two existing
 +-----------+               +----------------+------------------+            +-----------------+
                                              | HTTP
                             +----------------v------------------+
-                            |  Fleet Ops (Training server)       |
+                            |  FleetOps (Training server)       |
                             |  - Pipeline Editor UI (React Flow) |
                             |  - Thin proxy (NO pipeline tables) |
                             |  - Proxies all requests to this    |
@@ -116,12 +116,12 @@ Everything in between is ours to redesign. This is what makes the migration safe
 ### 4.5 Communication Flow
 
 ```
-User designs pipeline in Fleet Ops UI (React Flow editor)
+User designs pipeline in FleetOps UI (React Flow editor)
        |
-Fleet Ops Backend (thin proxy — no pipeline tables in its DB)
+FleetOps Backend (thin proxy — no pipeline tables in its DB)
        |
        v
-Fleet Ops Pipelines Service (THIS SERVICE)
+FleetOps Pipelines Service (THIS SERVICE)
   - Owns PostgreSQL: pipeline definitions, versions, active state
   - Executes pipelines against images
   - Fully independent at runtime
@@ -135,7 +135,7 @@ Production: Cron -> POST /detect -> runs active pipeline -> alerts to Cloud
 | Server | IP | Hosts | Role |
 |--------|-----|-------|------|
 | **AI server** | `10.125.17.219` | This service (+ its PostgreSQL), models service, SeaScanner Detection Service (legacy), GPU | ML inference |
-| **Training server** | — | Fleet Ops (dashboard, pipeline editor, backend, PostgreSQL) | UI + orchestration |
+| **Training server** | — | FleetOps (dashboard, pipeline editor, backend, PostgreSQL) | UI + orchestration |
 | **Cron server** | — | Cron service | Pulls images from vessel cameras, sends to detection pipeline |
 | **AH server** | — | Alerts Hub (legacy) | Rule-based post-detection filtering. Will be decommissioned. |
 | **Cloud server** | `10.10.9.12` | SeaScanner Cloud | Alert persistence, distribution, SSE stream |
@@ -144,9 +144,9 @@ Production: Cron -> POST /detect -> runs active pipeline -> alerts to Cloud
 
 ```
 ~/__MS__staging/
-+-- fleet-ops-models-service/          # Model storage + HTTP push deployment
++-- ModelsHubService/          # Model storage + HTTP push deployment
 |   +-- models/                        # .pt files stored here
-+-- fleet-ops-pipelines-service/       # THIS SERVICE
++-- PipelinesService/       # THIS SERVICE
 |   +-- model_cache/                   # Cached .pt files (pulled from models service on demand)
 +-- SeaScannerObjectDetectionService/  # Will be replaced by this service (Phase 3)
 +-- video-annotator-service/           # Receives models from models service
@@ -158,7 +158,7 @@ Production: Cron -> POST /detect -> runs active pipeline -> alerts to Cloud
 
 ### 5.1 Origin
 
-A fully working Phase 1 implementation exists inside the Fleet Ops monorepo at `fleet-ops/pipeline-runtime/`. This service extracts that code into its own repository for independent deployment on the AI server.
+A fully working Phase 1 implementation exists inside the FleetOps monorepo at `FleetOps/pipeline-runtime/`. This service extracts that code into its own repository for independent deployment on the AI server.
 
 ### 5.2 Service Code (this repo)
 
@@ -181,7 +181,7 @@ A fully working Phase 1 implementation exists inside the Fleet Ops monorepo at `
 
 | Variable | Env Var | Default | Description |
 |----------|---------|---------|-------------|
-| `MODEL_DIR` | `MODEL_DIR` | `../fleet-ops-models-service/models` | (Deprecated) Legacy path to `.pt` model files |
+| `MODEL_DIR` | `MODEL_DIR` | `../ModelsHubService/models` | (Deprecated) Legacy path to `.pt` model files |
 | `MODEL_CACHE_DIR` | `MODEL_CACHE_DIR` | `./model_cache` | Local directory for cached model files pulled from models service |
 | `MODELS_SERVICE_URL` | `MODELS_SERVICE_URL` | `http://localhost:8100` | Base URL of the models service for fetching model files |
 | `PORT` | `PIPELINE_RUNTIME_PORT` | `8200` | Service port |
@@ -196,11 +196,11 @@ A fully working Phase 1 implementation exists inside the Fleet Ops monorepo at `
 | `EnsembleStage` | `ensemble` | Runs N models on the same image, groups detections by IoU overlap, aggregates confidence via mean/max/weighted_average. Config: `models[]`, `strategy`, `weights[]`. |
 | `JSONOutputStage` | `json_output` | Formats pipeline context into clean output JSON (detection count, detections array, metadata, alert decision). Terminal node. |
 
-### 5.3 Fleet Ops Backend Integration (Training server)
+### 5.3 FleetOps Backend Integration (Training server)
 
-The Fleet Ops backend (`fleet-ops/backend/app/routers/pipelines.py`) currently integrates with this service as follows:
+The FleetOps backend (`FleetOps/backend/app/routers/pipelines.py`) currently integrates with this service as follows:
 
-- **Pipeline CRUD** with versioning — `Pipeline`, `PipelineVersion`, `PipelineTestRun` database models currently live in Fleet Ops PostgreSQL. **These will be removed from Fleet Ops and moved to this service's own PostgreSQL** (see Section 11.2).
+- **Pipeline CRUD** with versioning — `Pipeline`, `PipelineVersion`, `PipelineTestRun` database models currently live in FleetOps PostgreSQL. **These will be removed from FleetOps and moved to this service's own PostgreSQL** (see Section 11.2).
 - **Test proxy** — `POST /api/v1/pipelines/{id}/test` reads pipeline definition from DB, proxies image + definition to `http://10.125.17.219:8200/pipelines/test`, saves test run record. **This will become a passthrough to this service's expanded API.**
 - **Runtime proxies** — `/api/v1/pipeline-runtime/models` and `/api/v1/pipeline-runtime/status` proxy to this service's `/models` and `/health`
 - **Node type registry** — `GET /api/v1/pipeline-nodes/types` returns config schemas for all 4 implemented node types
@@ -209,9 +209,9 @@ The Fleet Ops backend (`fleet-ops/backend/app/routers/pipelines.py`) currently i
 
 Config: `ai_server_pipeline_runtime_url = "http://10.125.17.219:8200"`
 
-### 5.4 Fleet Ops Frontend Integration (Training server)
+### 5.4 FleetOps Frontend Integration (Training server)
 
-The Fleet Ops React app already has:
+The FleetOps React app already has:
 
 - **Pipeline Editor page** (`PipelineEditor.tsx`) — React Flow canvas with drag-and-drop
 - **Pipeline List page** (`Pipelines.tsx`) — saved pipeline definitions
@@ -346,7 +346,7 @@ Builds an executable pipeline from a JSON definition. Topological sort for execu
 
 ## 9. PostgreSQL Database Schema
 
-This service owns its own PostgreSQL instance running on the AI server. The database contains all pipeline-related data. These tables were previously in Fleet Ops PostgreSQL and have been moved here.
+This service owns its own PostgreSQL instance running on the AI server. The database contains all pipeline-related data. These tables were previously in FleetOps PostgreSQL and have been moved here.
 
 ### 9.1 Tables
 
@@ -402,25 +402,25 @@ This service owns its own PostgreSQL instance running on the AI server. The data
 
 ### 9.2 SQLAlchemy Models
 
-These tables will be implemented as SQLAlchemy ORM models in a `models.py` or `db/models.py` file, using the async SQLAlchemy pattern consistent with Fleet Ops backend conventions.
+These tables will be implemented as SQLAlchemy ORM models in a `models.py` or `db/models.py` file, using the async SQLAlchemy pattern consistent with FleetOps backend conventions.
 
 ### 9.3 Migration Strategy
 
-Pipeline CRUD currently lives in Fleet Ops backend (`fleet-ops/backend/app/routers/pipelines.py`) with data in Fleet Ops PostgreSQL. The migration:
+Pipeline CRUD currently lives in FleetOps backend (`FleetOps/backend/app/routers/pipelines.py`) with data in FleetOps PostgreSQL. The migration:
 
 1. Add PostgreSQL + SQLAlchemy to this service
 2. Create the tables in this service's database
 3. Add CRUD endpoints to this service's API
-4. Migrate existing pipeline data from Fleet Ops DB to this service's DB
-5. Update Fleet Ops backend to proxy all pipeline operations to this service
-6. Remove pipeline tables (`Pipeline`, `PipelineVersion`, `PipelineTestRun`) from Fleet Ops PostgreSQL
-7. Remove pipeline business logic from Fleet Ops backend (keep only proxy routes)
+4. Migrate existing pipeline data from FleetOps DB to this service's DB
+5. Update FleetOps backend to proxy all pipeline operations to this service
+6. Remove pipeline tables (`Pipeline`, `PipelineVersion`, `PipelineTestRun`) from FleetOps PostgreSQL
+7. Remove pipeline business logic from FleetOps backend (keep only proxy routes)
 
 ---
 
 ## 10. API Contract
 
-This service exposes the full pipeline API. Fleet Ops backend proxies ALL of these endpoints — Fleet Ops backend no longer has pipeline business logic, it is a passthrough.
+This service exposes the full pipeline API. FleetOps backend proxies ALL of these endpoints — FleetOps backend no longer has pipeline business logic, it is a passthrough.
 
 ### 10.1 Pipeline CRUD
 
@@ -577,22 +577,22 @@ Execute an ad-hoc pipeline definition against a test image. Accepts multipart (i
 
 ### Phase 1 — "It Works on One Image" (Complete)
 
-Linear pipeline execution, test via Fleet Ops UI, see results at every stage.
+Linear pipeline execution, test via FleetOps UI, see results at every stage.
 
 **What was built:**
 - FastAPI service with `/pipelines/test`, `/models`, `/health`
 - Pipeline engine with topological sort, per-node timing, error handling
 - 4 stage types: image_input, yolo_detector, ensemble, json_output
 - Model caching (module-level dict, load once per model file)
-- Fleet Ops backend CRUD + proxy integration
-- Fleet Ops frontend pipeline editor with React Flow
+- FleetOps backend CRUD + proxy integration
+- FleetOps frontend pipeline editor with React Flow
 
 **What was NOT built:**
 - No production traffic (Cron still calls old SeaScanner Detection Service)
 - No conditional logic (gates, routers, filters)
 - No pipeline publishing or syncing
 - No batch testing
-- No own database (pipeline data lived in Fleet Ops PostgreSQL)
+- No own database (pipeline data lived in FleetOps PostgreSQL)
 
 ### Phase 2 — "Smart Routing & Rules"
 
@@ -604,7 +604,7 @@ DAG execution with conditional branches. Logic nodes replace Alerts Hub rule log
 - Full DAG execution with conditional routing (not just linear chains)
 - Execution tracing that records which branch was taken at each gate
 
-**Scope for Fleet Ops (separate repo):**
+**Scope for FleetOps (separate repo):**
 - 5 new node type UIs with config panels
 - Conditional edge rendering (labeled pass/reject)
 - Rule builder UI
@@ -634,11 +634,11 @@ This service replaces SeaScanner Detection Service + Alerts Hub in production.
 
 ### 12.1 Repo Setup (immediate)
 
-1. Move code from `fleet-ops/pipeline-runtime/` to this repo
+1. Move code from `FleetOps/pipeline-runtime/` to this repo
 2. Fix imports — relative `..config` becomes absolute `config` (stages are no longer a sub-package of a larger repo)
-3. Update `MODEL_DIR` default in `config.py` to `../fleet-ops-models-service/models` (sibling directory on AI server)
+3. Update `MODEL_DIR` default in `config.py` to `../ModelsHubService/models` (sibling directory on AI server)
 4. Add `deploy.sh` with three modes: `test` (run locally), `--install` (systemd setup), `--update` (pull + restart)
-5. Add systemd service file (`fleet-ops-pipelines.service`)
+5. Add systemd service file (`PipelinesService.service`)
 6. Add `.gitignore`, `requirements.txt`, `README.md`
 
 ### 12.2 Add PostgreSQL + Data Ownership (new — critical path)
@@ -648,13 +648,13 @@ This service replaces SeaScanner Detection Service + Alerts Hub in production.
 3. **Add database config** — `DATABASE_URL` env var in `config.py` (e.g., `postgresql+asyncpg://user:pass@localhost:5432/pipelines`)
 4. **Add Alembic** — database migrations for schema management
 5. **Add CRUD endpoints** — `GET/POST/PUT/DELETE /pipelines`, `GET /pipelines/{id}/versions`, `POST /pipelines/{id}/test` (with DB lookup), `POST /pipelines/{id}/publish`, `GET /pipelines/active/{flow}`
-6. **Migrate existing data** — one-time script to copy pipeline data from Fleet Ops PostgreSQL to this service's database
-7. **Update Fleet Ops backend** — convert pipeline router from business logic to thin proxy (all requests forwarded to this service)
-8. **Remove pipeline tables from Fleet Ops DB** — drop `Pipeline`, `PipelineVersion`, `PipelineTestRun` models and tables from Fleet Ops backend
+6. **Migrate existing data** — one-time script to copy pipeline data from FleetOps PostgreSQL to this service's database
+7. **Update FleetOps backend** — convert pipeline router from business logic to thin proxy (all requests forwarded to this service)
+8. **Remove pipeline tables from FleetOps DB** — drop `Pipeline`, `PipelineVersion`, `PipelineTestRun` models and tables from FleetOps backend
 
 ### 12.3 Phase 2 Implementation
 
-Add logic stages. Each stage follows the same pattern: implement `PipelineStage`, register in `StageRegistry`, add config schema to Fleet Ops backend node type registry.
+Add logic stages. Each stage follows the same pattern: implement `PipelineStage`, register in `StageRegistry`, add config schema to FleetOps backend node type registry.
 
 ### 12.4 Phase 3 Implementation
 
@@ -666,15 +666,15 @@ Add production endpoints, alert output stage, pipeline caching, and hot-reload. 
 
 | Decision | Rationale |
 |----------|-----------|
-| **This service owns its own PostgreSQL** | Resilience (runs independently if Fleet Ops is down), data ownership (service that executes pipelines owns definitions), decoupling (multiple UIs/CLIs can consume the API), future-proof (different flows are just different pipelines). |
-| **Fleet Ops UI stays in Fleet Ops, not here** | Fleet Ops is the unified ops dashboard. UI needs data from multiple services. Micro-frontends add complexity. API is the boundary. |
-| **Fleet Ops backend becomes thin proxy** | Single source of truth for pipeline data lives here. No dual-write, no sync issues, no stale cache. |
+| **This service owns its own PostgreSQL** | Resilience (runs independently if FleetOps is down), data ownership (service that executes pipelines owns definitions), decoupling (multiple UIs/CLIs can consume the API), future-proof (different flows are just different pipelines). |
+| **FleetOps UI stays in FleetOps, not here** | FleetOps is the unified ops dashboard. UI needs data from multiple services. Micro-frontends add complexity. API is the boundary. |
+| **FleetOps backend becomes thin proxy** | Single source of truth for pipeline data lives here. No dual-write, no sync issues, no stale cache. |
 | **PostgreSQL over SQLite** | Production service handling live detection pipelines. Concurrent access from API requests. Needs real ACID, connection pooling, and production-grade durability. |
-| **React Flow for editor** (not n8n) | Full control, matches Fleet Ops theme, n8n is workflow automation not ML inference. n8n itself uses React Flow under the hood. |
+| **React Flow for editor** (not n8n) | Full control, matches FleetOps theme, n8n is workflow automation not ML inference. n8n itself uses React Flow under the hood. |
 | **Generic pipeline engine** | Supports future use cases (CV screening, container tampering) without building new services. Open/closed principle. |
 | **Config ownership in pipeline nodes** | Same model can run with different inference params in different pipeline stages. Model Hub stores files + advisory `recommended_config` only. |
 | **Compatibility sandwich** | Never change Cron input or Cloud output contracts. Replace only the middle. This makes migration safe and reversible. |
-| **Separate repo** | Deployed on AI server with different lifecycle, dependencies, and hardware than Fleet Ops. Needs ultralytics + PyTorch + CUDA. |
+| **Separate repo** | Deployed on AI server with different lifecycle, dependencies, and hardware than FleetOps. Needs ultralytics + PyTorch + CUDA. |
 | **Pull-through model cache** | Models are fetched from the models service over HTTP on demand and cached locally (in-memory + disk). Avoids filesystem coupling, survives containerization and scaling. UI-driven model selection — the service only fetches models referenced by pipeline definitions. |
 | **Module-level model cache** | YOLO models are expensive to load (seconds). Cache in process memory, reload only when model file changes. |
 | **Topological sort execution** | Supports DAG structure needed for Phase 2 conditional routing. Linear chains are a special case of DAG. |
@@ -685,16 +685,16 @@ Add production endpoints, alert output stage, pipeline caching, and hot-reload. 
 
 | Component | Technology | Why |
 |-----------|-----------|-----|
-| Web framework | FastAPI | Async-native, matches Fleet Ops stack, good for ML workloads |
+| Web framework | FastAPI | Async-native, matches FleetOps stack, good for ML workloads |
 | Server | uvicorn | Standard ASGI server for FastAPI |
 | Database | PostgreSQL | Production-grade, ACID, JSONB for pipeline definitions, concurrent access |
-| ORM | SQLAlchemy (async) | Consistent with Fleet Ops backend, async support via asyncpg |
+| ORM | SQLAlchemy (async) | Consistent with FleetOps backend, async support via asyncpg |
 | Migrations | Alembic | Schema versioning and migration management |
 | Model inference | ultralytics (YOLO) | Current model format, direct access to PyTorch |
 | Image processing | Pillow (PIL) | Image decoding, dimension reading |
 | HTTP client | httpx | Model fetching from models service (pull-through cache), future alert output to SeaScanner Cloud (Phase 3) |
 | Form parsing | python-multipart | Required by FastAPI for file upload endpoints |
-| Runtime | Python 3.11+ | Match type union syntax (`str | None`), Fleet Ops standard |
+| Runtime | Python 3.11+ | Match type union syntax (`str | None`), FleetOps standard |
 | GPU | CUDA (via PyTorch) | Available on AI server, explicitly configured via `PIPELINE_RUNTIME_DEVICE` env var |
 
 ---
@@ -763,9 +763,9 @@ This shows how the full SeaScanner Detection Service + Alerts Hub logic would lo
 | GPU memory exhaustion from too many cached models | Service crashes | Pre-load only active pipeline's models. Evict models on pipeline switch. Monitor memory. |
 | Production cutover breaks alert flow | Clients don't receive alerts | Shadow mode: run both pipelines, compare outputs. Gradual cutover vessel by vessel. |
 | Corrupted pipeline definition in production | Bad alerts or no alerts | Version history + one-click rollback. Validate definition before accepting publish. Require successful test run before publish. |
-| Network partition between Training and AI servers | Can't publish new pipelines | Pipeline def stored in this service's own DB. Production continues with active pipeline indefinitely. No dependency on Fleet Ops at runtime. |
+| Network partition between Training and AI servers | Can't publish new pipelines | Pipeline def stored in this service's own DB. Production continues with active pipeline indefinitely. No dependency on FleetOps at runtime. |
 | PostgreSQL on AI server adds operational overhead | Another database to manage | Docker Compose for easy setup. Automated backups. Small dataset (pipeline defs are tiny JSON docs). |
-| Data migration from Fleet Ops DB | Downtime, data loss | One-time migration script with validation. Run in maintenance window. Keep Fleet Ops tables as read-only backup until verified. |
+| Data migration from FleetOps DB | Downtime, data loss | One-time migration script with validation. Run in maintenance window. Keep FleetOps tables as read-only backup until verified. |
 
 ---
 
@@ -787,12 +787,12 @@ This shows how the full SeaScanner Detection Service + Alerts Hub logic would lo
 
 | Resource | Location |
 |----------|----------|
-| Full Pipeline Builder PRD (all components) | `fleet-ops/docs/prd-pipeline-builder.md` |
-| Original runtime implementation | `fleet-ops/pipeline-runtime/` |
-| Fleet Ops backend pipeline router | `fleet-ops/backend/app/routers/pipelines.py` |
-| Fleet Ops frontend pipeline editor | `fleet-ops/frontend/src/pages/PipelineEditor.tsx` |
-| Fleet Ops frontend pipeline list | `fleet-ops/frontend/src/pages/Pipelines.tsx` |
+| Full Pipeline Builder PRD (all components) | `FleetOps/docs/prd-pipeline-builder.md` |
+| Original runtime implementation | `FleetOps/pipeline-runtime/` |
+| FleetOps backend pipeline router | `FleetOps/backend/app/routers/pipelines.py` |
+| FleetOps frontend pipeline editor | `FleetOps/frontend/src/pages/PipelineEditor.tsx` |
+| FleetOps frontend pipeline list | `FleetOps/frontend/src/pages/Pipelines.tsx` |
 | Pull-Through Model Cache PRD | `docs/prd-pull-through-model-cache.md` |
-| Model Hub PRD | `fleet-ops/docs/prd-model-hub.md` |
-| Models service repo | `fleet-ops-models-service/` (sibling on AI server) |
-| GitHub | `https://github.com/daniel-friedman-ms/fleet-ops-pipelines-service` |
+| Model Hub PRD | `FleetOps/docs/prd-model-hub.md` |
+| Models service repo | `ModelsHubService/` (sibling on AI server) |
+| GitHub | `https://github.com/daniel-friedman-ms/PipelinesService` |

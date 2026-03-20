@@ -1,8 +1,8 @@
-# Fleet Ops Pipelines Service
+# PipelinesService
 
-Pipeline execution and management service for Fleet Ops. Runs on the AI server (`10.125.17.219:8200`).
+Pipeline execution and management service for FleetOps. Runs on the AI server (`10.125.17.219:8200`).
 
-Owns all pipeline data (definitions, versions, test runs, deployments) in its own PostgreSQL database. Fleet Ops is a UI consumer that proxies requests to this service's API.
+Owns all pipeline data (definitions, versions, test runs, deployments) in its own PostgreSQL database. FleetOps is a UI consumer that proxies requests to this service's API.
 
 See [PRD.md](PRD.md) for full architecture and design context.
 
@@ -10,8 +10,8 @@ See [PRD.md](PRD.md) for full architecture and design context.
 
 ```bash
 # Clone
-git clone https://github.com/daniel-friedman-ms/fleet-ops-pipelines-service.git
-cd fleet-ops-pipelines-service
+git clone https://github.com/daniel-friedman-ms/PipelinesService.git
+cd PipelinesService
 
 # Test mode (local run)
 bash deploy.sh
@@ -83,7 +83,7 @@ sudo -u postgres psql -c "CREATE DATABASE pipelines OWNER pipeline;"
 ## systemd
 
 ```bash
-sudo systemctl status fleet-ops-pipelines-service
-sudo systemctl restart fleet-ops-pipelines-service
-sudo journalctl -u fleet-ops-pipelines-service -f
+sudo systemctl status PipelinesService
+sudo systemctl restart PipelinesService
+sudo journalctl -u PipelinesService -f
 ```

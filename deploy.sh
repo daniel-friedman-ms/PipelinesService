@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Deploy the Fleet Ops Pipelines Service.
+# Deploy the PipelinesService.
 # Run this script from the repo directory.
 #
 # Usage:
@@ -10,7 +10,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SERVICE_NAME="fleet-ops-pipelines-service"
+SERVICE_NAME="PipelinesService"
 
 # ── Python venv + deps ──────────────────────────────────────────────────────
 
@@ -40,7 +40,7 @@ cmd_install() {
 
     echo "==> Installing systemd service..."
     sed "s|WorkingDirectory=.*|WorkingDirectory=${SCRIPT_DIR}|; s|ExecStart=.*|ExecStart=${SCRIPT_DIR}/venv/bin/python main.py|" \
-        "$SCRIPT_DIR/fleet-ops-pipelines-service.service" > /etc/systemd/system/"${SERVICE_NAME}.service"
+        "$SCRIPT_DIR/PipelinesService.service" > /etc/systemd/system/"${SERVICE_NAME}.service"
 
     systemctl daemon-reload
     systemctl enable "$SERVICE_NAME"

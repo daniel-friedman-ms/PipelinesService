@@ -1,4 +1,4 @@
-"""Fleet Ops Pipelines Service — pipeline CRUD, execution, and deployment."""
+"""PipelinesService — pipeline CRUD, execution, and deployment."""
 
 import json
 import logging
@@ -37,7 +37,7 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="Fleet Ops Pipelines Service", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="PipelinesService", version="0.1.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -602,5 +602,5 @@ async def publish_pipeline(
 if __name__ == "__main__":
     import uvicorn
 
-    logger.info(f"Starting Pipelines Service on port {PORT}, device={DEVICE}, model_cache_dir={MODEL_CACHE_DIR}, models_service={MODELS_SERVICE_URL}")
+    logger.info(f"Starting PipelinesService on port {PORT}, device={DEVICE}, model_cache_dir={MODEL_CACHE_DIR}, models_service={MODELS_SERVICE_URL}")
     uvicorn.run("main:app", host="0.0.0.0", port=PORT, reload=True)
