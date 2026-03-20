@@ -9,7 +9,7 @@
 
 ## 1. Problem
 
-The pipelines service reads `.pt` model files directly from the models service's filesystem (`../fleet-ops-models-service/models`). This is a hard filesystem coupling that:
+The pipelines service reads `.pt` model files directly from the models service's filesystem (`../ModelsHubService/models`). This is a hard filesystem coupling that:
 
 - **Breaks with containerization** — services in separate containers can't share a filesystem path
 - **Breaks with horizontal scaling** — multiple pipelines service instances can't all mount the same directory
@@ -43,7 +43,7 @@ Pipeline references "yolov8n.pt"
 The pipelines service does **not** auto-discover or sync all models. It only fetches models that are explicitly referenced in pipeline definitions. The flow:
 
 1. **Models service** stores model files (source of truth)
-2. **Fleet Ops UI** shows available models (queries models service catalog)
+2. **FleetOps UI** shows available models (queries models service catalog)
 3. **Operator** configures a pipeline node to use a specific model
 4. **Pipeline definition** saved to pipelines service with `"model_filename": "yolov8n.pt"`
 5. **Pipelines service** fetches the model on first use, caches locally
