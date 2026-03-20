@@ -1,0 +1,13 @@
+[Unit]
+Description=Fleet Ops Pipelines Service
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/placeholder
+ExecStart=/placeholder
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
