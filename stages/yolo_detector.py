@@ -2,11 +2,10 @@
 
 import io
 import logging
-import os
 
 from PIL import Image
 
-from config import MODEL_DIR, DEVICE
+from config import DEVICE
 from engine import PipelineStage, PipelineContext
 
 logger = logging.getLogger(__name__)
@@ -15,14 +14,19 @@ logger = logging.getLogger(__name__)
 _model_cache: dict[str, object] = {}
 
 
-def _get_model(filename: str):
-    """Load a YOLO model from cache or disk."""
+async def get_model(filename: str):
+    """Load a YOLO model, fetching from models service if not cached locally."""
+    from model_resolver import ensure_model_on_disk
+
+    path, changed = await ensure_model_on_disk(filename)
+
+    # Evict stale in-memory cache if the file was re-downloaded
+    if changed and filename in _model_cache:
+        del _model_cache[filename]
+
     if filename not in _model_cache:
         from ultralytics import YOLO
 
-        path = os.path.join(MODEL_DIR, filename)
-        if not os.path.isfile(path):
-            raise FileNotFoundError(f"Model file not found: {path}")
         logger.info(f"Loading model {filename} on device={DEVICE}")
         model = YOLO(path)
         _model_cache[filename] = model
@@ -47,7 +51,7 @@ class YOLODetectorStage(PipelineStage):
         if not ctx.image:
             raise ValueError("No image in pipeline context")
 
-        model = _get_model(self.model_filename)
+        model = await get_model(self.model_filename)
         img = Image.open(io.BytesIO(ctx.image))
 
         results = model.predict(

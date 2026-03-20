@@ -37,7 +37,8 @@ sudo -u postgres psql -c "CREATE DATABASE pipelines OWNER pipeline;"
 
 | Env Var | Default | Description |
 |---------|---------|-------------|
-| `MODEL_DIR` | `../fleet-ops-models-service/models` | Path to `.pt` model files |
+| `MODELS_SERVICE_URL` | `http://localhost:8100` | Base URL of the models service for fetching model files |
+| `MODEL_CACHE_DIR` | `./model_cache` | Local directory for cached model files |
 | `PIPELINE_RUNTIME_PORT` | `8200` | Service port |
 | `PIPELINE_RUNTIME_DEVICE` | `cpu` | Inference device (`cpu` or `cuda`) |
 | `PIPELINE_DB_URL` | `postgresql+asyncpg://pipeline:pipeline@localhost:5432/pipelines` | PostgreSQL connection string |
@@ -75,7 +76,8 @@ sudo -u postgres psql -c "CREATE DATABASE pipelines OWNER pipeline;"
 | Method | Path | Description |
 |--------|------|-------------|
 | `GET` | `/pipeline-nodes/types` | Node type registry |
-| `GET` | `/models` | List `.pt` model files |
+| `GET` | `/models` | List cached `.pt` model files |
+| `POST` | `/models/fetch?filename=X` | Pre-warm: fetch model from models service into local cache |
 | `GET` | `/health` | Health check |
 
 ## systemd
